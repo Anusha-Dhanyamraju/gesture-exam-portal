@@ -23,6 +23,31 @@ export default function Exam() {
 
   const keyboardRows = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
 
+  // ---------- NEW: Keystroke timing state ----------
+  const [keystrokeLog, setKeystrokeLog] = useState([]);
+  const lastKeyTimeRef = useRef(null);
+
+  function logKeypress(source, keyLabel) {
+    const now = performance.now(); // ms since page load
+    let gap = null;
+
+    if (lastKeyTimeRef.current != null) {
+      gap = (now - lastKeyTimeRef.current) / 1000; // seconds
+    }
+    lastKeyTimeRef.current = now;
+
+    setKeystrokeLog((prev) => [
+      ...prev,
+      {
+        question: currentIndex + 1,
+        source, // "gesture" or "physical"
+        key: keyLabel,
+        time: now,
+        gap,
+      },
+    ]);
+  }
+
   // ----------- LOAD QUESTIONS -----------
   useEffect(() => {
     async function loadQuestions() {
@@ -60,6 +85,17 @@ export default function Exam() {
     }));
   }
 
+  // NEW: capture physical keyboard timings
+  function handleTextareaKeyDown(e) {
+    const key = e.key;
+
+    // Only log real typing keys: letters, space & backspace
+    if (key.length === 1 || key === "Backspace" || key === " ") {
+      const label = key === " " ? "SPACE" : key;
+      logKeypress("physical", label);
+    }
+  }
+
   function goToQuestion(newIndex) {
     if (newIndex < 0 || newIndex >= questions.length) return;
     setCurrentIndex(newIndex);
@@ -76,7 +112,8 @@ export default function Exam() {
 
     try {
       const name = localStorage.getItem("studentName") || "Student";
-      const rollNumber = localStorage.getItem("studentRollNumber") || "Unknown";
+      const rollNumber =
+        localStorage.getItem("studentRollNumber") || "Unknown";
 
       let score = 0;
       questions.forEach((q, i) => {
@@ -91,6 +128,7 @@ export default function Exam() {
         rollNumber,
         answers,
         score,
+        keystrokeLog, // optional: you can also store it in DB for analysis
       };
 
       const res = await axios.post(`${API_BASE_URL}/api/submit-exam`, payload);
@@ -220,7 +258,6 @@ export default function Exam() {
           return;
         }
 
-        // Hands instance
         hands = new window.Hands({
           locateFile: (file) =>
             `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${file}`,
@@ -240,8 +277,15 @@ export default function Exam() {
         function typeChar(char) {
           const box = answerRef.current;
           if (!box) return;
-          if (char === "SPACE") box.value += " ";
-          else box.value += char;
+          if (char === "SPACE") {
+            box.value += " ";
+          } else {
+            box.value += char;
+          }
+
+          // NEW: log gesture keypress
+          logKeypress("gesture", char);
+
           setAnswers((prev) => ({
             ...prev,
             [`Q${currentIndex + 1}`]: box.value,
@@ -252,6 +296,7 @@ export default function Exam() {
           const box = answerRef.current;
           if (!box) return;
           box.value = box.value.slice(0, -1);
+
           setAnswers((prev) => ({
             ...prev,
             [`Q${currentIndex + 1}`]: box.value,
@@ -403,6 +448,33 @@ export default function Exam() {
     };
   }, [currentIndex]);
 
+  // ----------- GRAPH DATA PREP -----------
+  const gapData = keystrokeLog
+    .filter((d) => d.gap != null)
+    .map((d, idx) => ({ ...d, index: idx }));
+
+  const graphWidth = 280;
+  const graphHeight = 100;
+
+  let graphPoints = "";
+  let maxGap = 0;
+
+  if (gapData.length > 0) {
+    maxGap = gapData.reduce((m, d) => Math.max(m, d.gap), 0);
+    const usableWidth = graphWidth - 20;
+    const usableHeight = graphHeight - 20;
+
+    graphPoints = gapData
+      .map((d, idx) => {
+        const x =
+          (idx / Math.max(gapData.length - 1, 1)) * usableWidth + 10;
+        const y =
+          graphHeight - (d.gap / (maxGap || 1)) * usableHeight - 10;
+        return `${x},${y}`;
+      })
+      .join(" ");
+  }
+
   // ----------- RENDER -----------
   const currentQuestion = questions[currentIndex];
   const currentAnswer = answers[`Q${currentIndex + 1}`] || "";
@@ -436,7 +508,9 @@ export default function Exam() {
             <>
               <p style={styles.questionText}>
                 <strong>Q{currentIndex + 1}.</strong>{" "}
-                {currentQuestion.question || currentQuestion.q || "Untitled"}
+                {currentQuestion.question ||
+                  currentQuestion.q ||
+                  "Untitled"}
               </p>
 
               {/* MCQ options (if present) */}
@@ -465,9 +539,11 @@ export default function Exam() {
                 ref={answerRef}
                 value={currentAnswer}
                 onChange={handleAnswerChange}
+                onKeyDown={handleTextareaKeyDown}
                 placeholder="Answer here (you can also use gestures)…"
                 style={styles.textarea}
               />
+
               <div style={styles.navRow}>
                 <button
                   onClick={() => goToQuestion(currentIndex - 1)}
@@ -516,6 +592,54 @@ export default function Exam() {
                 >
                   {submitMessage}
                 </p>
+              )}
+
+              {/* ------- NEW: Graph box ------- */}
+              {gapData.length > 1 && (
+                <div style={styles.graphBox}>
+                  <div style={styles.graphTitle}>
+                    Time gap between letters (seconds)
+                  </div>
+                  <svg
+                    width={graphWidth}
+                    height={graphHeight}
+                    style={styles.graphSvg}
+                  >
+                    {/* X-axis */}
+                    <line
+                      x1="10"
+                      y1={graphHeight - 10}
+                      x2={graphWidth - 5}
+                      y2={graphHeight - 10}
+                      stroke="#4b5563"
+                      strokeWidth="1"
+                    />
+                    {/* Y-axis */}
+                    <line
+                      x1="10"
+                      y1="10"
+                      x2="10"
+                      y2={graphHeight - 10}
+                      stroke="#4b5563"
+                      strokeWidth="1"
+                    />
+
+                    {graphPoints && (
+                      <polyline
+                        fill="none"
+                        stroke="#22c55e"
+                        strokeWidth="2"
+                        points={graphPoints}
+                      />
+                    )}
+                  </svg>
+                  <div style={styles.graphFooter}>
+                    <span style={styles.graphAxisLabel}>Letters →</span>
+                    <span style={styles.graphAxisLabel}>
+                      Max gap: {maxGap.toFixed(2)} s
+                    </span>
+                  </div>
+                </div>
               )}
             </>
           )}
@@ -640,19 +764,18 @@ const styles = {
     marginBottom: "8px",
     padding: "6px 8px",
     borderRadius: "8px",
-    backgroundColor: "rgba(15,23,42,0.85)",
+    backgroundColor: "rgba(15,23,42,0.9)",
     border: "1px solid #4b5563",
-    fontSize: "13px",
   },
   optionRow: {
     display: "flex",
     gap: 6,
-    marginBottom: 4,
+    marginBottom: 2,
+    fontSize: "13px",
   },
   optionLabel: {
     fontWeight: "600",
-    color: "#e5e7eb",
-    minWidth: 20,
+    minWidth: 18,
   },
   textarea: {
     width: "100%",
@@ -744,5 +867,34 @@ const styles = {
     userSelect: "none",
     color: "#e5e7eb",
     transition: "transform 0.12s ease, background-color 0.12s ease",
+  },
+  // NEW: Graph styles
+  graphBox: {
+    marginTop: "10px",
+    padding: "8px 10px",
+    borderRadius: "10px",
+    backgroundColor: "rgba(15,23,42,0.95)",
+    border: "1px solid #4b5563",
+  },
+  graphTitle: {
+    fontSize: "12px",
+    marginBottom: "4px",
+    color: "#e5e7eb",
+  },
+  graphSvg: {
+    display: "block",
+    width: "100%",
+    backgroundColor: "#020617",
+    borderRadius: "6px",
+  },
+  graphFooter: {
+    marginTop: 4,
+    display: "flex",
+    justifyContent: "space-between",
+    fontSize: "11px",
+    color: "#9ca3af",
+  },
+  graphAxisLabel: {
+    fontSize: "11px",
   },
 };
