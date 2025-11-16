@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../config";
+
 
 export default function Exam() {
   const [questions, setQuestions] = useState([]);
@@ -23,7 +25,7 @@ export default function Exam() {
     async function fetchQuestions() {
       try {
         setLoading(true);
-        const res = await axios.get("http://localhost:5000/api/questions");
+        const res = await axios.get("${API_BASE_URL}/api/questions");
         setQuestions(res.data || []);
       } catch (err) {
         console.error(err);
@@ -120,7 +122,7 @@ export default function Exam() {
       };
 
       const res = await axios.post(
-        "http://localhost:5000/api/submit-exam",
+        "${API_BASE_URL}/api/submit-exam",
         payload
       );
 

@@ -58,10 +58,16 @@ export default function Login() {
             "Login failed. Please check your details."
         );
       }
-    } catch (err) {
+        } catch (err) {
       console.error("Login error:", err);
-      setError("Server error. Try again.");
+      const msg =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.message ||
+        "Server error. Try again.";
+      setError(msg);
     }
+
   }
 
   return (
