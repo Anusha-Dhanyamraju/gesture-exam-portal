@@ -15,8 +15,7 @@ app.use(express.json());
 // --------------------------------------
 // CONNECT MONGODB
 // --------------------------------------
-const MONGO_URL =
-  "mongodb+srv://examUser:examPass123@gestureexamdb.ebpsncf.mongodb.net/?appName=GestureExamDB";
+const MONGO_URL =process.env.MONGO_URL;
 
 mongoose
   .connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true })
@@ -142,5 +141,5 @@ app.get("/api/results", async (req, res) => {
 // --------------------------------------
 // START SERVER
 // --------------------------------------
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log("🚀 Server running on port " + PORT));
