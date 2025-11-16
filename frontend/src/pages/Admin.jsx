@@ -21,7 +21,12 @@ export default function Admin() {
       setResults(res.data || []);
     } catch (err) {
       console.error("Error fetching results:", err);
-      setResultsError("Error fetching results from server.");
+      const msg =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.message ||
+        "Error fetching results from server.";
+      setResultsError(msg);
     } finally {
       setLoadingResults(false);
     }
@@ -33,13 +38,18 @@ export default function Admin() {
       const res = await axios.get(`${API_BASE_URL}/api/questions`);
       const data = res.data;
       if (Array.isArray(data) && data.length > 0) {
-        setQuestionsStatus(`✅ ${data.length} questions loaded from database`);
+        setQuestionsStatus(`✅ ${data.length} questions loaded from database.`);
       } else {
         setQuestionsStatus("⚠️ No questions found in database.");
       }
     } catch (err) {
       console.error("Error verifying questions:", err);
-      setQuestionsStatus("❌ Error verifying questions.");
+      const msg =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.message ||
+        "Error verifying questions.";
+      setQuestionsStatus("❌ " + msg);
     }
   }
 
@@ -82,7 +92,12 @@ export default function Admin() {
       }
     } catch (err) {
       console.error("Error uploading questions:", err);
-      setUploadError("❌ Upload failed. Check console for details.");
+      const msg =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.message ||
+        "Upload failed.";
+      setUploadError("❌ " + msg);
     } finally {
       setUploading(false);
     }
@@ -93,14 +108,23 @@ export default function Admin() {
     <div style={styles.page}>
       <div style={styles.container}>
         <h1 style={styles.title}>Admin Dashboard</h1>
+        <p style={styles.subtitle}>
+          Manage questions and monitor student performance in real time.
+        </p>
 
         {/* Upload Questions */}
         <section style={styles.section}>
           <h2 style={styles.heading}>Upload Questions File (JSON)</h2>
           <input type="file" id="questionsFile" accept=".json" />
-          <button style={styles.button} onClick={handleUploadQuestions} disabled={uploading}>
+          <br />
+          <button
+            style={styles.button}
+            onClick={handleUploadQuestions}
+            disabled={uploading}
+          >
             {uploading ? "Uploading..." : "Upload Questions"}
           </button>
+
           {questionsStatus && <p style={styles.status}>{questionsStatus}</p>}
           {uploadSuccess && <p style={styles.success}>{uploadSuccess}</p>}
           {uploadError && <p style={styles.error}>{uploadError}</p>}
@@ -122,25 +146,25 @@ export default function Admin() {
               <table style={styles.table}>
                 <thead>
                   <tr>
-                    <th>Roll Number</th>
-                    <th>Name</th>
-                    <th>Score</th>
-                    <th>Submitted At</th>
-                    <th>Answers</th>
+                    <th style={styles.th}>Roll Number</th>
+                    <th style={styles.th}>Name</th>
+                    <th style={styles.th}>Score</th>
+                    <th style={styles.th}>Submitted At</th>
+                    <th style={styles.th}>Answers</th>
                   </tr>
                 </thead>
                 <tbody>
                   {results.map((r, idx) => (
                     <tr key={idx}>
-                      <td>{r.rollNumber}</td>
-                      <td>{r.name}</td>
-                      <td>{r.score}</td>
-                      <td>
+                      <td style={styles.td}>{r.rollNumber}</td>
+                      <td style={styles.td}>{r.name}</td>
+                      <td style={styles.td}>{r.score}</td>
+                      <td style={styles.td}>
                         {r.submittedAt
                           ? new Date(r.submittedAt).toLocaleString()
                           : "-"}
                       </td>
-                      <td>
+                      <td style={styles.td}>
                         {r.answers
                           ? Object.entries(r.answers).map(([q, ans]) => (
                               <div key={q}>
@@ -156,7 +180,10 @@ export default function Admin() {
             </div>
           )}
 
-          <button style={{ ...styles.button, marginTop: 10 }} onClick={fetchResults}>
+          <button
+            style={{ ...styles.button, marginTop: 10 }}
+            onClick={fetchResults}
+          >
             Refresh Results
           </button>
         </section>
@@ -167,63 +194,91 @@ export default function Admin() {
 
 const styles = {
   page: {
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#0f172a",
     minHeight: "100vh",
     padding: "30px 10px",
+    fontFamily:
+      "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   },
   container: {
-    maxWidth: "1000px",
+    maxWidth: "1100px",
     margin: "0 auto",
-    background: "#ffffff",
-    borderRadius: "12px",
-    padding: "24px",
-    boxShadow: "0 0 10px rgba(0,0,0,0.08)",
+    background: "#020617",
+    borderRadius: "18px",
+    padding: "24px 26px",
+    boxShadow: "0 18px 40px rgba(0,0,0,0.4)",
+    border: "1px solid rgba(148,163,184,0.4)",
+    color: "#e5e7eb",
   },
   title: {
     fontSize: "24px",
-    fontWeight: "bold",
-    marginBottom: "20px",
-    textAlign: "center",
+    fontWeight: "800",
+    marginBottom: "4px",
+  },
+  subtitle: {
+    fontSize: "13px",
+    color: "#9ca3af",
+    marginBottom: "18px",
   },
   section: {
-    marginBottom: "30px",
+    marginBottom: "26px",
+    padding: "14px 0",
+    borderTop: "1px solid rgba(31,41,55,0.8)",
   },
   heading: {
-    fontSize: "18px",
+    fontSize: "17px",
     fontWeight: "600",
-    marginBottom: "10px",
+    marginBottom: "8px",
+    color: "#e5e7eb",
   },
   button: {
     padding: "8px 16px",
     backgroundColor: "#2563eb",
     color: "#fff",
     border: "none",
-    borderRadius: "6px",
+    borderRadius: "999px",
     cursor: "pointer",
     marginTop: "8px",
+    fontSize: "13px",
+    fontWeight: "600",
   },
   status: {
     marginTop: "8px",
+    fontSize: "13px",
+    color: "#9ca3af",
   },
   error: {
-    color: "red",
+    color: "#fca5a5",
     marginTop: "8px",
+    fontSize: "13px",
   },
   success: {
-    color: "green",
+    color: "#4ade80",
     marginTop: "8px",
+    fontSize: "13px",
   },
   tableWrapper: {
     marginTop: "12px",
     overflowX: "auto",
+    borderRadius: "10px",
+    border: "1px solid rgba(55,65,81,0.9)",
   },
   table: {
     width: "100%",
     borderCollapse: "collapse",
-    fontSize: "14px",
+    fontSize: "13px",
+    backgroundColor: "#020617",
   },
   th: {
-    padding: "8px",
-    border: "1px solid #ddd",
+    padding: "10px",
+    borderBottom: "1px solid #374151",
+    backgroundColor: "#111827",
+    fontWeight: "600",
+    textAlign: "left",
+  },
+  td: {
+    padding: "9px 10px",
+    borderBottom: "1px solid #1f2937",
+    verticalAlign: "top",
   },
 };
