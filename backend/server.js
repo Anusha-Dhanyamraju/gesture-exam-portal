@@ -27,8 +27,15 @@ mongoose
 // --------------------------------------
 const QuestionSchema = new mongoose.Schema({
   question: String,
-  answer: String,
+  options: {
+    a: String,
+    b: String,
+    c: String,
+    d: String,
+  },
+  answer: String, // "a" | "b" | "c" | "d"
 });
+
 
 const ResultSchema = new mongoose.Schema({
   name: String,
