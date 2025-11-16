@@ -21,10 +21,9 @@ export default function Exam() {
   );
   const [mediapipeAvailable, setMediapipeAvailable] = useState(true);
 
-  // Simple A–Z + SPACE keys (can be extended)
   const keyboardRows = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
 
-  // ------------------- LOAD QUESTIONS -------------------
+  // ----------- LOAD QUESTIONS -----------
   useEffect(() => {
     async function loadQuestions() {
       setLoadingQuestions(true);
@@ -52,7 +51,7 @@ export default function Exam() {
     loadQuestions();
   }, []);
 
-  // ------------------- HANDLE TEXT ANSWERS -------------------
+  // ----------- ANSWER HANDLING -----------
   function handleAnswerChange(e) {
     const value = e.target.value;
     setAnswers((prev) => ({
@@ -67,7 +66,7 @@ export default function Exam() {
     setSubmitMessage("");
   }
 
-  // ------------------- SUBMIT EXAM -------------------
+  // ----------- SUBMIT EXAM -----------
   async function handleSubmit() {
     if (!questions.length) return;
     if (!window.confirm("Are you sure you want to submit the exam?")) return;
@@ -79,7 +78,6 @@ export default function Exam() {
       const name = localStorage.getItem("studentName") || "Student";
       const rollNumber = localStorage.getItem("studentRollNumber") || "Unknown";
 
-      // Auto-score (only if question has an `answer` field)
       let score = 0;
       questions.forEach((q, i) => {
         const ans = (answers[`Q${i + 1}`] || "").trim().toLowerCase();
@@ -111,7 +109,7 @@ export default function Exam() {
     }
   }
 
-  // ------------------- GESTURE + WEBCAM SETUP -------------------
+  // ----------- GESTURE + MEDIAPIPE SETUP -----------
   useEffect(() => {
     let hands = null;
     let camera = null;
@@ -181,7 +179,7 @@ export default function Exam() {
         canvas.width = video.videoWidth || 1280;
         canvas.height = video.videoHeight || 720;
 
-        // Try to load MediaPipe
+        // Load MediaPipe scripts
         try {
           await loadScript(
             "https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js"
@@ -198,26 +196,33 @@ export default function Exam() {
           setGestureStatus(
             "Gesture keyboard disabled (MediaPipe failed to load)."
           );
-          // Draw simple overlay so user knows webcam area:
           ctx.fillStyle = "rgba(0,0,0,0.4)";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           return;
         }
 
+        // ✅ Correct global checks
         if (
-          !window.Hands ||
-          !window.Hands.Hands ||
-          !window.Camera ||
-          !window.drawConnectors ||
-          !window.drawLandmarks
+          typeof window.Hands !== "function" ||
+          typeof window.Camera !== "function" ||
+          typeof window.drawConnectors !== "function" ||
+          typeof window.drawLandmarks !== "function" ||
+          typeof window.HAND_CONNECTIONS === "undefined"
         ) {
-          console.error("MediaPipe global objects missing on window.");
+          console.error("MediaPipe globals missing on window:", {
+            HandsType: typeof window.Hands,
+            CameraType: typeof window.Camera,
+            drawConnectorsType: typeof window.drawConnectors,
+            drawLandmarksType: typeof window.drawLandmarks,
+            handConnections: typeof window.HAND_CONNECTIONS,
+          });
           setMediapipeAvailable(false);
           setGestureStatus("Gesture keyboard disabled (incompatible browser).");
           return;
         }
 
-        hands = new window.Hands.Hands({
+        // ✅ Correct constructors
+        hands = new window.Hands({
           locateFile: (file) =>
             `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${file}`,
         });
@@ -238,7 +243,6 @@ export default function Exam() {
           if (!box) return;
           if (char === "SPACE") box.value += " ";
           else box.value += char;
-          // Also sync to state
           setAnswers((prev) => ({
             ...prev,
             [`Q${currentIndex + 1}`]: box.value,
@@ -273,12 +277,12 @@ export default function Exam() {
           ) {
             const landmarks = results.multiHandLandmarks[0];
 
-            // Draw landmarks
+            // ✅ Correct HAND_CONNECTIONS usage
             try {
               window.drawConnectors(
                 ctx,
                 landmarks,
-                window.Hands.HAND_CONNECTIONS,
+                window.HAND_CONNECTIONS,
                 { color: "#22c55e", lineWidth: 2 }
               );
               window.drawLandmarks(ctx, landmarks, {
@@ -299,7 +303,6 @@ export default function Exam() {
             const canvasX = indexTip.x * canvas.width;
             const canvasY = indexTip.y * canvas.height;
 
-            // Draw cursor circle
             ctx.fillStyle = "rgba(59,130,246,0.9)";
             ctx.beginPath();
             ctx.arc(canvasX, canvasY, 8, 0, Math.PI * 2);
@@ -329,7 +332,7 @@ export default function Exam() {
               }
             }
 
-            // Fist detection for backspace
+            // Fist detection
             const tips = [4, 8, 12, 16, 20];
             let sum = 0;
             tips.forEach((i) => {
@@ -364,7 +367,8 @@ export default function Exam() {
           }
         });
 
-        camera = new window.Camera.Camera(video, {
+        // ✅ Correct Camera constructor
+        camera = new window.Camera(video, {
           onFrame: async () => {
             if (!hands) return;
             if (video.readyState >= 2) {
@@ -402,7 +406,7 @@ export default function Exam() {
     };
   }, [currentIndex]);
 
-  // ------------------- RENDER -------------------
+  // ----------- RENDER -----------
   const currentQuestion = questions[currentIndex];
   const currentAnswer = answers[`Q${currentIndex + 1}`] || "";
 
@@ -419,7 +423,6 @@ export default function Exam() {
             style={styles.video}
           />
           <canvas ref={canvasRef} style={styles.canvas} />
-          {/* Status badge */}
           <div style={styles.statusBadge}>{gestureStatus}</div>
         </div>
 
@@ -498,7 +501,7 @@ export default function Exam() {
           )}
         </div>
 
-        {/* Virtual Keyboard Overlay */}
+        {/* Virtual Keyboard */}
         <div style={styles.keyboardWrapper}>
           {keyboardRows.map((row, rIndex) => (
             <div key={rIndex} style={styles.keyboardRow}>
@@ -514,7 +517,6 @@ export default function Exam() {
               ))}
             </div>
           ))}
-          {/* Backspace + Space row */}
           <div style={styles.keyboardRow}>
             <div
               className="gesture-key"
@@ -534,7 +536,6 @@ export default function Exam() {
         </div>
       </div>
 
-      {/* Small CSS hook for gesture active state */}
       <style>{`
         .gesture-key-active {
           background-color: #2563eb !important;
@@ -546,7 +547,7 @@ export default function Exam() {
   );
 }
 
-// ------------------- STYLES -------------------
+// ----------- STYLES -----------
 const styles = {
   page: {
     height: "100vh",
