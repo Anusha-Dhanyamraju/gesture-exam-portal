@@ -201,7 +201,6 @@ export default function Exam() {
           return;
         }
 
-        // ✅ Correct global checks
         if (
           typeof window.Hands !== "function" ||
           typeof window.Camera !== "function" ||
@@ -221,7 +220,7 @@ export default function Exam() {
           return;
         }
 
-        // ✅ Correct constructors
+        // Hands instance
         hands = new window.Hands({
           locateFile: (file) =>
             `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${file}`,
@@ -277,7 +276,6 @@ export default function Exam() {
           ) {
             const landmarks = results.multiHandLandmarks[0];
 
-            // ✅ Correct HAND_CONNECTIONS usage
             try {
               window.drawConnectors(
                 ctx,
@@ -367,7 +365,6 @@ export default function Exam() {
           }
         });
 
-        // ✅ Correct Camera constructor
         camera = new window.Camera(video, {
           onFrame: async () => {
             if (!hands) return;
@@ -441,6 +438,29 @@ export default function Exam() {
                 <strong>Q{currentIndex + 1}.</strong>{" "}
                 {currentQuestion.question || currentQuestion.q || "Untitled"}
               </p>
+
+              {/* MCQ options (if present) */}
+              {currentQuestion.options && (
+                <div style={styles.optionsBox}>
+                  <div style={styles.optionRow}>
+                    <span style={styles.optionLabel}>A.</span>
+                    <span>{currentQuestion.options.a}</span>
+                  </div>
+                  <div style={styles.optionRow}>
+                    <span style={styles.optionLabel}>B.</span>
+                    <span>{currentQuestion.options.b}</span>
+                  </div>
+                  <div style={styles.optionRow}>
+                    <span style={styles.optionLabel}>C.</span>
+                    <span>{currentQuestion.options.c}</span>
+                  </div>
+                  <div style={styles.optionRow}>
+                    <span style={styles.optionLabel}>D.</span>
+                    <span>{currentQuestion.options.d}</span>
+                  </div>
+                </div>
+              )}
+
               <textarea
                 ref={answerRef}
                 value={currentAnswer}
@@ -615,6 +635,24 @@ const styles = {
   questionText: {
     fontSize: "14px",
     marginBottom: "6px",
+  },
+  optionsBox: {
+    marginBottom: "8px",
+    padding: "6px 8px",
+    borderRadius: "8px",
+    backgroundColor: "rgba(15,23,42,0.85)",
+    border: "1px solid #4b5563",
+    fontSize: "13px",
+  },
+  optionRow: {
+    display: "flex",
+    gap: 6,
+    marginBottom: 4,
+  },
+  optionLabel: {
+    fontWeight: "600",
+    color: "#e5e7eb",
+    minWidth: 20,
   },
   textarea: {
     width: "100%",
