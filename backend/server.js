@@ -10,32 +10,35 @@ const mongoose = require("mongoose");
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "25mb" })); // allow base64 images
 
 // --------------------------------------
 // CONNECT MONGODB
 // --------------------------------------
-const MONGO_URL =process.env.MONGO_URL;
+const MONGO_URL = process.env.MONGO_URL;
 
 mongoose
-  .connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true })
+  .connect(MONGO_URL)
   .then(() => console.log("📌 MongoDB Connected"))
   .catch((err) => console.error("❌ MongoDB Error:", err));
 
 // --------------------------------------
-// MONGOOSE MODELS
+// FOLDERS
+// --------------------------------------
+const SNAPSHOT_DIR = path.join(__dirname, "uploads", "snapshots");
+
+if (!fs.existsSync(SNAPSHOT_DIR)) {
+  fs.mkdirSync(SNAPSHOT_DIR, { recursive: true });
+}
+
+// --------------------------------------
+// SCHEMAS
 // --------------------------------------
 const QuestionSchema = new mongoose.Schema({
   question: String,
-  options: {
-    a: String,
-    b: String,
-    c: String,
-    d: String,
-  },
-  answer: String, // "a" | "b" | "c" | "d"
+  options: { a: String, b: String, c: String, d: String },
+  answer: String,
 });
-
 
 const ResultSchema = new mongoose.Schema({
   name: String,
@@ -43,104 +46,124 @@ const ResultSchema = new mongoose.Schema({
   answers: Object,
   score: Number,
   submittedAt: String,
+  snapshots: [String], // 🆕 array of snapshot file paths
+});
+const SnapshotSchema = new mongoose.Schema({
+  name: String,
+  rollNumber: String,
+  imageData: String, // Base64 image
+  capturedAt: String,
 });
 
+const Snapshot = mongoose.model("Snapshot", SnapshotSchema);
 const Question = mongoose.model("Question", QuestionSchema);
 const Result = mongoose.model("Result", ResultSchema);
 
 // --------------------------------------
-// MULTER: File Upload
-// --------------------------------------
-const upload = multer({ dest: path.join(__dirname, "uploads") });
-
-// --------------------------------------
-// ADMIN LOGIN (same as before)
+// ADMIN LOGIN
 // --------------------------------------
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "admin123";
 
 app.post("/api/admin-login", (req, res) => {
   const { username, password } = req.body;
-  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD)
-    return res.json({ success: true });
-  return res.json({ success: false, error: "Invalid admin credentials" });
+  return res.json({
+    success: username === ADMIN_USERNAME && password === ADMIN_PASSWORD,
+  });
 });
 
 // --------------------------------------
-// STUDENT LOGIN (simple for now)
+// STUDENT LOGIN
 // --------------------------------------
 app.post("/api/student-login", (req, res) => {
   const { name, rollNumber } = req.body || {};
-  if (!name || !rollNumber) {
+  if (!name || !rollNumber)
     return res.json({ success: false, error: "Missing fields" });
-  }
-  // Later we can store students in DB
   return res.json({ success: true });
 });
 
 // --------------------------------------
-// GET QUESTIONS (from MongoDB)
+// GET QUESTIONS
 // --------------------------------------
 app.get("/api/questions", async (req, res) => {
   try {
-    const data = await Question.find({});
-    res.json(data);
+    res.json(await Question.find({}));
   } catch (err) {
-    console.error("Error fetching questions:", err);
     res.json([]);
   }
 });
 
 // --------------------------------------
-// UPLOAD QUESTIONS JSON FILE → MongoDB
+// UPLOAD QUESTIONS
 // --------------------------------------
+const upload = multer({ dest: path.join(__dirname, "uploads") });
+
 app.post("/api/upload-questions", upload.single("file"), async (req, res) => {
   try {
-    if (!req.file)
-      return res.json({ success: false, error: "No file uploaded" });
-
-    const data = fs.readFileSync(req.file.path, "utf8");
-    const parsed = JSON.parse(data);
-
-    // Clear old questions and insert new ones
+    if (!req.file) return res.json({ success: false, error: "No file" });
+    const data = JSON.parse(fs.readFileSync(req.file.path, "utf8"));
     await Question.deleteMany({});
-    await Question.insertMany(parsed);
-
+    await Question.insertMany(data);
     fs.unlinkSync(req.file.path);
-
     res.json({ success: true });
   } catch (err) {
-    console.log("Upload questions error:", err);
-    res.json({ success: false, error: "Invalid JSON format" });
+    res.json({ success: false, error: "Invalid file format" });
   }
 });
 
 // --------------------------------------
-// SUBMIT EXAM → store Result in MongoDB
+// SNAPSHOT UPLOAD (Base64)
+// --------------------------------------
+app.post("/api/upload-snapshot", async (req, res) => {
+  try {
+    const { name, rollNumber, imageData } = req.body;
+    if (!name || !rollNumber || !imageData) {
+      return res.json({ success: false, error: "Missing fields" });
+    }
+
+    await Snapshot.create({
+      name,
+      rollNumber,
+      imageData,
+      capturedAt: new Date().toISOString(),
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Snapshot upload error:", err);
+    res.json({ success: false });
+  }
+});
+app.get("/api/snapshots", async (req, res) => {
+  try {
+    const list = await Snapshot.find({}).sort({ capturedAt: -1 });
+    res.json(list);
+  } catch (err) {
+    console.error("Fetch snapshot error:", err);
+    res.json([]);
+  }
+});
+// --------------------------------------
+// SUBMIT EXAM
 // --------------------------------------
 app.post("/api/submit-exam", async (req, res) => {
   try {
     const submission = req.body;
     submission.submittedAt = new Date().toISOString();
-
     await Result.create(submission);
-
     res.json({ success: true });
   } catch (err) {
-    console.log("Submit exam error:", err);
     res.json({ success: false });
   }
 });
 
 // --------------------------------------
-// GET RESULTS (Admin)
+// GET RESULTS
 // --------------------------------------
 app.get("/api/results", async (req, res) => {
   try {
-    const data = await Result.find({});
-    res.json(data);
-  } catch (err) {
-    console.log("Fetch results error:", err);
+    res.json(await Result.find({}));
+  } catch {
     res.json([]);
   }
 });
