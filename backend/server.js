@@ -44,11 +44,6 @@ function writeJsonSafe(filePath, payload) {
   }
 }
 
-// -------------------------------------------------------
-// MONGODB CONNECTION  (Direct URL, no .env required)
-// -------------------------------------------------------
-const MONGO_URL =
-  "mongodb+srv://examUser:examUser123@gestureexamdb.ebpsncf.mongodb.net/GestureExamDB?retryWrites=true&w=majority&appName=gestureexamdb";
 // --------------------------------------
 // CONNECT MONGODB
 // --------------------------------------
@@ -59,11 +54,6 @@ const DEFAULT_DB_NAME = "GestureExamDB";
 const MONGO_URL = process.env.MONGO_URL || DEFAULT_MONGO_URL;
 const MONGO_DB_NAME = process.env.MONGO_DB_NAME || DEFAULT_DB_NAME;
 let mongoReady = false;
-
-mongoose
-  .connect(MONGO_URL)
-  .then(() => console.log("📌 MongoDB Connected"))
-  .catch((err) => console.error("❌ MongoDB Error:", err));
 if (MONGO_URL) {
   mongoose
     .connect(MONGO_URL, {
@@ -122,10 +112,6 @@ const Result = mongoose.model("Result", ResultSchema);
 // -------------------------------------------------------
 // MULTER FOR QUESTIONS JSON UPLOAD
 // -------------------------------------------------------
-const upload = multer({ dest: path.join(__dirname, "uploads") });
-// --------------------------------------
-// MULTER: File Upload
-// --------------------------------------
 const upload = multer({ dest: uploadsDir });
 
 // -------------------------------------------------------
@@ -157,16 +143,7 @@ app.post("/api/student-login", (req, res) => {
 // -------------------------------------------------------
 // GET QUESTIONS
 // -------------------------------------------------------
-// --------------------------------------
-// GET QUESTIONS
-// --------------------------------------
 app.get("/api/questions", async (req, res) => {
-  try {
-    const data = await Question.find({});
-    res.json(data);
-  } catch (err) {
-    console.log("Fetch questions error:", err);
-    res.json([]);
   if (mongoReady) {
     try {
       const data = await Question.find({});
@@ -183,26 +160,15 @@ app.get("/api/questions", async (req, res) => {
 // -------------------------------------------------------
 // UPLOAD QUESTIONS JSON FILE
 // -------------------------------------------------------
-// --------------------------------------
-// UPLOAD QUESTIONS JSON FILE
-// --------------------------------------
 app.post("/api/upload-questions", upload.single("file"), async (req, res) => {
   if (!req.file) {
     return res.json({ success: false, error: "No file uploaded." });
   }
 
   try {
-    if (!req.file) return res.json({ success: false, error: "No file uploaded" });
-
     const fileData = fs.readFileSync(req.file.path, "utf8");
     const parsed = JSON.parse(fileData);
-    const data = fs.readFileSync(req.file.path, "utf8");
-    const parsed = JSON.parse(data);
 
-    await Question.deleteMany({});
-    await Question.insertMany(parsed);
-
-    fs.unlinkSync(req.file.path);
     if (!Array.isArray(parsed) || !parsed.length) {
       throw new Error("JSON must be a non-empty array of questions.");
     }
@@ -214,20 +180,18 @@ app.post("/api/upload-questions", upload.single("file"), async (req, res) => {
       writeJsonSafe(QUESTIONS_FILE, parsed);
     }
 
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (err) {
-    console.log("Upload error:", err);
-    res.json({ success: false, error: "Invalid JSON format" });
     console.error("Upload questions error:", err);
-    res.json({
+    return res.json({
       success: false,
       error: err.message || "Unable to process JSON file.",
     });
   } finally {
     try {
       fs.unlinkSync(req.file.path);
-    } catch (cleanupErr) {
-      // Ignore cleanup errors
+    } catch {
+      // ignore
     }
   }
 });
@@ -235,19 +199,13 @@ app.post("/api/upload-questions", upload.single("file"), async (req, res) => {
 // -------------------------------------------------------
 // SUBMIT EXAM
 // -------------------------------------------------------
-// --------------------------------------
-// SUBMIT EXAM
-// --------------------------------------
 app.post("/api/submit-exam", async (req, res) => {
   try {
-    const data = req.body;
-    data.submittedAt = new Date().toISOString();
     const submission = {
       ...req.body,
       submittedAt: new Date().toISOString(),
     };
 
-    await Result.create(data);
     if (mongoReady) {
       await Result.create(submission);
     } else {
