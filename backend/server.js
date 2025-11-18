@@ -12,15 +12,76 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Ensure local storage paths exist (used when MongoDB is unavailable)
+const uploadsDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+const QUESTIONS_FILE = path.join(uploadsDir, "questions.json");
+const RESULTS_FILE = path.join(__dirname, "results.json");
+
+function readJsonSafe(filePath, defaultValue) {
+  try {
+    if (!fs.existsSync(filePath)) return defaultValue;
+    const raw = fs.readFileSync(filePath, "utf8");
+    if (!raw.trim()) return defaultValue;
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error(`Error reading ${filePath}:`, err);
+    return defaultValue;
+  }
+}
+
+function writeJsonSafe(filePath, payload) {
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
+    return true;
+  } catch (err) {
+    console.error(`Error writing ${filePath}:`, err);
+    return false;
+  }
+}
+
 // --------------------------------------
 // CONNECT MONGODB
 // --------------------------------------
-const MONGO_URL =process.env.MONGO_URL;
+const DEFAULT_MONGO_URL =
+  "mongodb+srv://examUser:examUser123@gestureexamdb.ebpsncf.mongodb.net/?appName=GestureExamDB";
+const DEFAULT_DB_NAME = "GestureExamDB";
 
-mongoose
-  .connect(MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log("📌 MongoDB Connected"))
-  .catch((err) => console.error("❌ MongoDB Error:", err));
+const MONGO_URL = process.env.MONGO_URL || DEFAULT_MONGO_URL;
+const MONGO_DB_NAME = process.env.MONGO_DB_NAME || DEFAULT_DB_NAME;
+let mongoReady = false;
+
+if (MONGO_URL) {
+  mongoose
+    .connect(MONGO_URL, {
+      dbName: MONGO_DB_NAME,
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    })
+    .then(() => {
+      mongoReady = true;
+      console.log("📌 MongoDB Connected");
+    })
+    .catch((err) => {
+      mongoReady = false;
+      console.error("❌ MongoDB connection failed:", err.message);
+      console.warn("➡️ Falling back to local JSON storage.");
+    });
+
+  mongoose.connection.on("connected", () => {
+    mongoReady = true;
+  });
+  mongoose.connection.on("error", (err) => {
+    mongoReady = false;
+    console.error("MongoDB error:", err);
+  });
+  mongoose.connection.on("disconnected", () => {
+    mongoReady = false;
+    console.warn("MongoDB disconnected. Local JSON storage will be used.");
+  });
+}
 
 // --------------------------------------
 // MONGOOSE MODELS
@@ -51,7 +112,7 @@ const Result = mongoose.model("Result", ResultSchema);
 // --------------------------------------
 // MULTER: File Upload
 // --------------------------------------
-const upload = multer({ dest: path.join(__dirname, "uploads") });
+const upload = multer({ dest: uploadsDir });
 
 // --------------------------------------
 // ADMIN LOGIN (same as before)
@@ -79,56 +140,86 @@ app.post("/api/student-login", (req, res) => {
 });
 
 // --------------------------------------
-// GET QUESTIONS (from MongoDB)
+// GET QUESTIONS
 // --------------------------------------
 app.get("/api/questions", async (req, res) => {
-  try {
-    const data = await Question.find({});
-    res.json(data);
-  } catch (err) {
-    console.error("Error fetching questions:", err);
-    res.json([]);
+  if (mongoReady) {
+    try {
+      const data = await Question.find({});
+      return res.json(data);
+    } catch (err) {
+      console.error("Error fetching questions from MongoDB:", err);
+    }
   }
+
+  const data = readJsonSafe(QUESTIONS_FILE, []);
+  return res.json(data);
 });
 
 // --------------------------------------
-// UPLOAD QUESTIONS JSON FILE → MongoDB
+// UPLOAD QUESTIONS JSON FILE
 // --------------------------------------
 app.post("/api/upload-questions", upload.single("file"), async (req, res) => {
-  try {
-    if (!req.file)
-      return res.json({ success: false, error: "No file uploaded" });
+  if (!req.file) {
+    return res.json({ success: false, error: "No file uploaded." });
+  }
 
+  try {
     const data = fs.readFileSync(req.file.path, "utf8");
     const parsed = JSON.parse(data);
 
-    // Clear old questions and insert new ones
-    await Question.deleteMany({});
-    await Question.insertMany(parsed);
+    if (!Array.isArray(parsed) || !parsed.length) {
+      throw new Error("JSON must be a non-empty array of questions.");
+    }
 
-    fs.unlinkSync(req.file.path);
+    if (mongoReady) {
+      await Question.deleteMany({});
+      await Question.insertMany(parsed);
+    } else {
+      writeJsonSafe(QUESTIONS_FILE, parsed);
+    }
 
     res.json({ success: true });
   } catch (err) {
-    console.log("Upload questions error:", err);
-    res.json({ success: false, error: "Invalid JSON format" });
+    console.error("Upload questions error:", err);
+    res.json({
+      success: false,
+      error: err.message || "Unable to process JSON file.",
+    });
+  } finally {
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch (cleanupErr) {
+      // Ignore cleanup errors
+    }
   }
 });
 
 // --------------------------------------
-// SUBMIT EXAM → store Result in MongoDB
+// SUBMIT EXAM
 // --------------------------------------
 app.post("/api/submit-exam", async (req, res) => {
   try {
-    const submission = req.body;
-    submission.submittedAt = new Date().toISOString();
+    const submission = {
+      ...req.body,
+      submittedAt: new Date().toISOString(),
+    };
 
-    await Result.create(submission);
+    if (mongoReady) {
+      await Result.create(submission);
+    } else {
+      const existing = readJsonSafe(RESULTS_FILE, []);
+      existing.push(submission);
+      writeJsonSafe(RESULTS_FILE, existing);
+    }
 
     res.json({ success: true });
   } catch (err) {
-    console.log("Submit exam error:", err);
-    res.json({ success: false });
+    console.error("Submit exam error:", err);
+    res.json({
+      success: false,
+      error: "Unable to store submission. Please try again.",
+    });
   }
 });
 
@@ -136,13 +227,17 @@ app.post("/api/submit-exam", async (req, res) => {
 // GET RESULTS (Admin)
 // --------------------------------------
 app.get("/api/results", async (req, res) => {
-  try {
-    const data = await Result.find({});
-    res.json(data);
-  } catch (err) {
-    console.log("Fetch results error:", err);
-    res.json([]);
+  if (mongoReady) {
+    try {
+      const data = await Result.find({});
+      return res.json(data);
+    } catch (err) {
+      console.error("Fetch results error (MongoDB):", err);
+    }
   }
+
+  const data = readJsonSafe(RESULTS_FILE, []);
+  return res.json(data);
 });
 
 // --------------------------------------
