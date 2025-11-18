@@ -57,19 +57,12 @@ export default function Admin() {
       const res = await axios.get(`${API_BASE_URL}/api/results`);
       setResults(res.data || []);
     } catch (err) {
-      console.error("Error fetching results:", err);
-      const msg =
-        err.response?.data?.error ||
-        err.response?.data?.message ||
-        err.message ||
-        "Error fetching results from server.";
-      setResultsError(msg);
+      setResultsError("Error fetching results from server.");
     } finally {
       setLoadingResults(false);
     }
   }
 
-  // ---------- VERIFY QUESTIONS ----------
   async function verifyQuestionsFile() {
     try {
       const res = await axios.get(`${API_BASE_URL}/api/questions`);
@@ -87,14 +80,8 @@ export default function Admin() {
           lastChecked: new Date().toISOString(),
         });
       }
-    } catch (err) {
-      console.error("Error verifying questions:", err);
-      const msg =
-        err.response?.data?.error ||
-        err.response?.data?.message ||
-        err.message ||
-        "Error verifying questions.";
-      setQuestionsStatus("❌ " + msg);
+    } catch {
+      setQuestionsStatus("❌ Error verifying questions.");
     }
   }
 
@@ -228,14 +215,8 @@ export default function Admin() {
           `❌ ${res.data?.error || "Upload failed. Server rejected the file."}`
         );
       }
-    } catch (err) {
-      console.error("Error uploading questions:", err);
-      const msg =
-        err.response?.data?.error ||
-        err.response?.data?.message ||
-        err.message ||
-        "Upload failed.";
-      setUploadError("❌ " + msg);
+    } catch {
+      setUploadError("❌ Upload failed.");
     } finally {
       setUploading(false);
     }

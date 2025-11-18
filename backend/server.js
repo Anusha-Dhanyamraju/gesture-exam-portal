@@ -1,15 +1,17 @@
-// --------------------------------------
-// IMPORTS
-// --------------------------------------
+// -------------------------------------------------------
+// Gesture Exam Portal - Working Server (No Snapshots)
+// -------------------------------------------------------
+
 const express = require("express");
+const cors = require("cors");
+const mongoose = require("mongoose");
+const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
-const cors = require("cors");
-const multer = require("multer");
-const mongoose = require("mongoose");
 
 const app = express();
 app.use(cors());
+app.use(express.json({ limit: "10mb" }));
 app.use(express.json());
 
 // Ensure local storage paths exist (used when MongoDB is unavailable)
@@ -42,6 +44,11 @@ function writeJsonSafe(filePath, payload) {
   }
 }
 
+// -------------------------------------------------------
+// MONGODB CONNECTION  (Direct URL, no .env required)
+// -------------------------------------------------------
+const MONGO_URL =
+  "mongodb+srv://examUser:examUser123@gestureexamdb.ebpsncf.mongodb.net/GestureExamDB?retryWrites=true&w=majority&appName=gestureexamdb";
 // --------------------------------------
 // CONNECT MONGODB
 // --------------------------------------
@@ -53,6 +60,10 @@ const MONGO_URL = process.env.MONGO_URL || DEFAULT_MONGO_URL;
 const MONGO_DB_NAME = process.env.MONGO_DB_NAME || DEFAULT_DB_NAME;
 let mongoReady = false;
 
+mongoose
+  .connect(MONGO_URL)
+  .then(() => console.log("📌 MongoDB Connected"))
+  .catch((err) => console.error("❌ MongoDB Error:", err));
 if (MONGO_URL) {
   mongoose
     .connect(MONGO_URL, {
@@ -83,9 +94,9 @@ if (MONGO_URL) {
   });
 }
 
-// --------------------------------------
+// -------------------------------------------------------
 // MONGOOSE MODELS
-// --------------------------------------
+// -------------------------------------------------------
 const QuestionSchema = new mongoose.Schema({
   question: String,
   options: {
@@ -94,9 +105,8 @@ const QuestionSchema = new mongoose.Schema({
     c: String,
     d: String,
   },
-  answer: String, // "a" | "b" | "c" | "d"
+  answer: String,
 });
-
 
 const ResultSchema = new mongoose.Schema({
   name: String,
@@ -109,40 +119,54 @@ const ResultSchema = new mongoose.Schema({
 const Question = mongoose.model("Question", QuestionSchema);
 const Result = mongoose.model("Result", ResultSchema);
 
+// -------------------------------------------------------
+// MULTER FOR QUESTIONS JSON UPLOAD
+// -------------------------------------------------------
+const upload = multer({ dest: path.join(__dirname, "uploads") });
 // --------------------------------------
 // MULTER: File Upload
 // --------------------------------------
 const upload = multer({ dest: uploadsDir });
 
-// --------------------------------------
-// ADMIN LOGIN (same as before)
-// --------------------------------------
+// -------------------------------------------------------
+// ADMIN LOGIN
+// -------------------------------------------------------
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "admin123";
 
 app.post("/api/admin-login", (req, res) => {
   const { username, password } = req.body;
-  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD)
+
+  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
     return res.json({ success: true });
-  return res.json({ success: false, error: "Invalid admin credentials" });
+  }
+  res.json({ success: false, error: "Invalid Credentials" });
 });
 
-// --------------------------------------
-// STUDENT LOGIN (simple for now)
-// --------------------------------------
+// -------------------------------------------------------
+// STUDENT LOGIN
+// -------------------------------------------------------
 app.post("/api/student-login", (req, res) => {
-  const { name, rollNumber } = req.body || {};
+  const { name, rollNumber } = req.body;
   if (!name || !rollNumber) {
     return res.json({ success: false, error: "Missing fields" });
   }
-  // Later we can store students in DB
   return res.json({ success: true });
 });
 
+// -------------------------------------------------------
+// GET QUESTIONS
+// -------------------------------------------------------
 // --------------------------------------
 // GET QUESTIONS
 // --------------------------------------
 app.get("/api/questions", async (req, res) => {
+  try {
+    const data = await Question.find({});
+    res.json(data);
+  } catch (err) {
+    console.log("Fetch questions error:", err);
+    res.json([]);
   if (mongoReady) {
     try {
       const data = await Question.find({});
@@ -156,6 +180,9 @@ app.get("/api/questions", async (req, res) => {
   return res.json(data);
 });
 
+// -------------------------------------------------------
+// UPLOAD QUESTIONS JSON FILE
+// -------------------------------------------------------
 // --------------------------------------
 // UPLOAD QUESTIONS JSON FILE
 // --------------------------------------
@@ -165,9 +192,17 @@ app.post("/api/upload-questions", upload.single("file"), async (req, res) => {
   }
 
   try {
+    if (!req.file) return res.json({ success: false, error: "No file uploaded" });
+
+    const fileData = fs.readFileSync(req.file.path, "utf8");
+    const parsed = JSON.parse(fileData);
     const data = fs.readFileSync(req.file.path, "utf8");
     const parsed = JSON.parse(data);
 
+    await Question.deleteMany({});
+    await Question.insertMany(parsed);
+
+    fs.unlinkSync(req.file.path);
     if (!Array.isArray(parsed) || !parsed.length) {
       throw new Error("JSON must be a non-empty array of questions.");
     }
@@ -181,6 +216,8 @@ app.post("/api/upload-questions", upload.single("file"), async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
+    console.log("Upload error:", err);
+    res.json({ success: false, error: "Invalid JSON format" });
     console.error("Upload questions error:", err);
     res.json({
       success: false,
@@ -195,16 +232,22 @@ app.post("/api/upload-questions", upload.single("file"), async (req, res) => {
   }
 });
 
+// -------------------------------------------------------
+// SUBMIT EXAM
+// -------------------------------------------------------
 // --------------------------------------
 // SUBMIT EXAM
 // --------------------------------------
 app.post("/api/submit-exam", async (req, res) => {
   try {
+    const data = req.body;
+    data.submittedAt = new Date().toISOString();
     const submission = {
       ...req.body,
       submittedAt: new Date().toISOString(),
     };
 
+    await Result.create(data);
     if (mongoReady) {
       await Result.create(submission);
     } else {
@@ -223,9 +266,9 @@ app.post("/api/submit-exam", async (req, res) => {
   }
 });
 
-// --------------------------------------
+// -------------------------------------------------------
 // GET RESULTS (Admin)
-// --------------------------------------
+// -------------------------------------------------------
 app.get("/api/results", async (req, res) => {
   if (mongoReady) {
     try {
@@ -240,8 +283,15 @@ app.get("/api/results", async (req, res) => {
   return res.json(data);
 });
 
-// --------------------------------------
+// -------------------------------------------------------
+// HEALTH CHECK
+// -------------------------------------------------------
+app.get("/api/health", (req, res) => {
+  res.json({ status: "OK", message: "Server running fine 🚀" });
+});
+
+// -------------------------------------------------------
 // START SERVER
-// --------------------------------------
+// -------------------------------------------------------
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log("🚀 Server running on port " + PORT));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
