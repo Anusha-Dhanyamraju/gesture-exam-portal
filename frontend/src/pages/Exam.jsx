@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API_BASE_URL } from "../config";
 
 export default function Exam() {
+  const navigate = useNavigate();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const answerRef = useRef(null);
@@ -114,12 +116,16 @@ export default function Exam() {
       const res = await axios.post(`${API_BASE_URL}/api/submit-exam`, payload);
       if (res.data.success) {
         setSubmitMessage(`✅ Submitted! Score: ${score}/${questions.length}`);
+        // Redirect to login page after 2 seconds
+        setTimeout(() => {
+          navigate("/login");
+        }, 2000);
       } else {
         setSubmitMessage("❌ Failed to submit exam.");
+        setSubmitting(false);
       }
     } catch {
       setSubmitMessage("❌ Error submitting exam.");
-    } finally {
       setSubmitting(false);
     }
   }
