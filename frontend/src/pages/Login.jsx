@@ -6,16 +6,17 @@ import { API_BASE_URL } from "../config";
 export default function Login() {
   const navigate = useNavigate();
 
-  const [role, setRole] = useState("student"); // default
-  const [id, setId] = useState("");           // roll number OR admin username
+  const [role, setRole] = useState("student");
+  const [id, setId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   async function handleLogin(e) {
     e.preventDefault();
+    setError("");
 
-    if (!id || !password) {
-      setError("Please enter both fields");
+    if (!id || (role === "admin" && !password)) {
+      setError("Please enter required fields");
       return;
     }
 
@@ -24,127 +25,87 @@ export default function Login() {
       let payload = {};
 
       if (role === "admin") {
-        // 🔹 ADMIN LOGIN → backend on Render
         url = `${API_BASE_URL}/api/admin-login`;
-        payload = {
-          username: id,
-          password: password,
-        };
+        payload = { username: id, password };
       } else {
-        // 🔹 STUDENT LOGIN → backend on Render
         url = `${API_BASE_URL}/api/student-login`;
-        payload = {
-          name: id,          // using same for now
-          rollNumber: id,
-          // password is collected in UI but backend doesn’t use it yet
-        };
+        payload = { name: id, rollNumber: id };
       }
 
-      const response = await axios.post(url, payload);
+      const res = await axios.post(url, payload);
 
-      if (response.data.success) {
+      if (res.data.success) {
         if (role === "admin") {
           navigate("/admin");
         } else {
-          localStorage.setItem("studentRole", "student");
-          localStorage.setItem("studentRollNumber", id);
           localStorage.setItem("studentName", id);
+          localStorage.setItem("studentRollNumber", id);
           navigate("/exam");
         }
       } else {
-        setError(
-          response.data.message ||
-            response.data.error ||
-            "Login failed. Please check your details."
-        );
+        setError(res.data.error || "Login failed");
       }
-        } catch (err) {
-      console.error("Login error:", err);
-      const msg =
-        err.response?.data?.error ||
-        err.response?.data?.message ||
-        err.message ||
-        "Server error. Try again.";
-      setError(msg);
+    } catch (err) {
+      console.error(err);
+      setError("Server error. Try again.");
     }
-
   }
 
   return (
     <div style={styles.page}>
-      <div style={styles.leftPanel}>
-        <h1 style={styles.brand}>Gesture Exam Portal</h1>
-        <p style={styles.subtitle}>
-          Hands-free, secure, and accessible online examinations.
-        </p>
-      </div>
+      <div style={styles.card}>
+        <h2 style={styles.title}>Login</h2>
 
-      <div style={styles.rightPanel}>
-        <div style={styles.card}>
-          <h2 style={styles.title}>Welcome</h2>
-          <p style={styles.smallText}>
-            Choose your role and sign in to continue.
-          </p>
-
-          {/* Role Selector */}
-          <div style={styles.roleBox}>
-            <button
-              type="button"
-              onClick={() => {
+        <div style={styles.roleBox}>
+          <label>
+            <input
+              type="radio"
+              value="student"
+              checked={role === "student"}
+              onChange={() => {
                 setRole("student");
                 setError("");
               }}
-              style={{
-                ...styles.roleButton,
-                ...(role === "student" ? styles.roleButtonActive : {}),
-              }}
-            >
-              Student
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
+            />
+            Student
+          </label>
+          <label>
+            <input
+              type="radio"
+              value="admin"
+              checked={role === "admin"}
+              onChange={() => {
                 setRole("admin");
                 setError("");
               }}
-              style={{
-                ...styles.roleButton,
-                ...(role === "admin" ? styles.roleButtonActive : {}),
-              }}
-            >
-              Admin
-            </button>
-          </div>
-
-          <form onSubmit={handleLogin}>
-            <input
-              type="text"
-              placeholder={role === "admin" ? "Admin Username" : "Roll Number"}
-              value={id}
-              onChange={(e) => setId(e.target.value)}
-              style={styles.input}
             />
-
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={styles.input}
-            />
-
-            {error && <p style={styles.error}>{error}</p>}
-
-            <button type="submit" style={styles.button}>
-              Login
-            </button>
-          </form>
-
-          <p style={styles.footerNote}>
-            Admin: <strong>admin / admin123</strong> (demo)
-          </p>
+            Admin
+          </label>
         </div>
+
+        <input
+          style={styles.input}
+          type="text"
+          placeholder={role === "admin" ? "Admin Username" : "Roll Number"}
+          value={id}
+          onChange={(e) => setId(e.target.value)}
+        />
+
+        {role === "admin" && (
+          <input
+            style={styles.input}
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        )}
+
+        {error && <p style={styles.error}>{error}</p>}
+
+        <button style={styles.button} onClick={handleLogin}>
+          Login
+        </button>
       </div>
     </div>
   );
@@ -153,109 +114,48 @@ export default function Login() {
 const styles = {
   page: {
     height: "100vh",
+    background: "radial-gradient(circle at top, #1e3a8a, #020617 60%)",
     display: "flex",
-    background: "linear-gradient(135deg, #1d4ed8, #0f172a)",
-    color: "#f9fafb",
-    fontFamily:
-      "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  },
-  leftPanel: {
-    flex: 1.2,
-    padding: "60px 40px",
-    display: "flex",
-    flexDirection: "column",
     justifyContent: "center",
-  },
-  brand: {
-    fontSize: "40px",
-    fontWeight: "800",
-    marginBottom: "14px",
-  },
-  subtitle: {
-    fontSize: "16px",
-    maxWidth: "420px",
-    lineHeight: 1.5,
-    color: "#e5e7eb",
-  },
-  rightPanel: {
-    flex: 1,
-    display: "flex",
     alignItems: "center",
-    justifyContent: "center",
-    padding: "20px",
+    fontFamily: "system-ui",
   },
   card: {
-    background: "rgba(15,23,42,0.92)",
-    padding: "32px 28px",
-    borderRadius: "16px",
-    boxShadow: "0 18px 45px rgba(0,0,0,0.35)",
-    width: "100%",
-    maxWidth: "380px",
-    border: "1px solid rgba(148,163,184,0.4)",
+    width: 320,
+    background: "rgba(15,23,42,0.85)",
+    padding: 24,
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.12)",
+    boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+    textAlign: "center",
+    color: "white",
   },
-  title: {
-    marginBottom: "4px",
-    fontSize: "24px",
-    fontWeight: "700",
-    color: "#f9fafb",
-  },
-  smallText: {
-    marginBottom: "20px",
-    fontSize: "13px",
-    color: "#9ca3af",
+  title: { fontSize: 22, fontWeight: 700, marginBottom: 14 },
+  roleBox: {
+    display: "flex",
+    justifyContent: "space-between",
+    marginBottom: 12,
+    fontSize: 14,
   },
   input: {
     width: "100%",
-    padding: "10px 11px",
-    marginBottom: "12px",
-    borderRadius: "8px",
-    border: "1px solid #4b5563",
-    backgroundColor: "#020617",
-    color: "#e5e7eb",
-    fontSize: "14px",
-    outline: "none",
-  },
-  roleBox: {
-    display: "flex",
-    gap: "8px",
-    marginBottom: "16px",
-  },
-  roleButton: {
-    flex: 1,
-    padding: "8px 0",
-    borderRadius: "999px",
-    border: "1px solid #4b5563",
-    background: "transparent",
-    color: "#e5e7eb",
-    fontSize: "13px",
-    cursor: "pointer",
-  },
-  roleButtonActive: {
-    background: "#2563eb",
-    borderColor: "#2563eb",
-    color: "#f9fafb",
-    fontWeight: "600",
+    padding: "10px",
+    borderRadius: 8,
+    border: "1px solid #475569",
+    background: "#0f172a",
+    color: "white",
+    marginBottom: 10,
   },
   button: {
     width: "100%",
-    background: "#2563eb",
-    color: "white",
-    padding: "10px",
+    padding: 10,
+    borderRadius: 8,
+    background: "#3b82f6",
     border: "none",
-    borderRadius: "10px",
+    color: "white",
+    fontSize: 15,
+    fontWeight: 600,
     cursor: "pointer",
-    marginTop: "4px",
-    fontWeight: "600",
   },
-  error: {
-    color: "#fca5a5",
-    marginBottom: "6px",
-    fontSize: "13px",
-  },
-  footerNote: {
-    marginTop: "12px",
-    fontSize: "11px",
-    color: "#9ca3af",
-    textAlign: "center",
-  },
+  error: { fontSize: 12, color: "#fca5a5", marginBottom: 8 },
 };
